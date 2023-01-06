@@ -7,7 +7,7 @@
 
 ### Architecture Diagram
 
-![Diagram](Udagram.png)
+![Diagram](udagram.png)
 
 #### Usage
 
