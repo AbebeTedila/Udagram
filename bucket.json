@@ -1,0 +1,13 @@
+[{
+    "ParameterKey": "EnvironmentName",
+    "ParameterValue": "UdagramNet"
+},
+{
+    "ParameterKey": "S3BucketAppName",
+    "ParameterValue": "udagram-app-abbtdl"
+},
+{
+    "ParameterKey": "S3BucketKeyName",
+    "ParameterValue": "udagram-key-abbtdl"
+}
+]

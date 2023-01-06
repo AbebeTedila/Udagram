@@ -1,6 +1,18 @@
 [
 	{
 		"ParameterKey": "EnvironmentName",
-		"ParameterValue": "UdacityProject"
-	}
+    	"ParameterValue": "UdagramNet"
+	},
+	{
+        "ParameterKey": "SourceIPAdd",
+        "ParameterValue": "85.222.155.10/32"
+    },
+    {
+        "ParameterKey": "KeyBastionSSH",
+        "ParameterValue": "udagram"
+    },
+    {
+        "ParameterKey": "S3BucketKeyName",
+        "ParameterValue": "udagram-key-abbtdl"
+    }
 ]

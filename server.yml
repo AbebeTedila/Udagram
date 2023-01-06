@@ -1,33 +1,141 @@
-Parameters:
-  # Paramenters are entirely optional.
-  # but using them will make your cloudformation templates more reusable
-  # use them for things that may change over time, such as instance type,
-  # VPCs and so on.
-Resources:
-  # instace profile contains the IAM Role name(s) that we want to associate to our auto scaling EC2 Servers
-  # never give too much permissions to your EC2 instances! if they get hacked, the permissions get hacked also!
-  # in this example, I create a Role called UdacityS3ReadOnlyC2 and just give it a policy of S3 Read-Only Access
-  ProfileWithRolesForOurApp:
-    Type: AWS::IAM::InstanceProfile
-    Properties: 
-      Roles:
-        - UdacityS3ReadOnlyEC2
-Outputs: 
-  # This is also optional.
-  # Bonus points for useful outputs!
-  # for example, if you create a Load Balancer
-  # it's nice to output the URL to it here, so that we don't have to go to the console to get it.
+Description: >
+  Abebe Tedila | Udacity DevOps project-2 2023
+  Deploy a high-availability web app using CloudFormation
 
-# Sample UserData
-# When creating your Launch Configuration, you may need a UserData script
-# here's one that you can use for Ubuntu Linux that will:
-# Install Apache Web Server, Start it, and create an index.html that will be displayed
-# when you visit the IP address of this server with your web browser
-#Here it is:
-#
-#          #!/bin/bash
-#          apt-get update -y
-#          apt-get install apache2 -y
-#          systemctl start apache2.service
-#          cd /var/www/html
-#          echo "Udacity Demo Web Server Up and Running!" > index.html
+  #============================================== Parameters ===================================================
+Parameters:
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+    Default: UdagramNet
+
+  SourceIPAdd:
+    Description: Ip address to allow SSH access to the bastion host
+    Type: String
+    Default: 85.222.155.10/32
+
+  S3BucketKeyName:
+    Description: S3Bucke where ssh key is hosted
+    Type: String
+    Default: udagram-key-abbtdl
+
+  #create a .pem file, and upload it to udagram-key-abbtdl S3 buckets.
+  KeyBastionSSH:
+    Description: KeyName to access bastion host
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    Default: udagram
+  
+Mappings:
+  WebAppRegion:
+    us-west-2:
+      HVM64: ami-03f8756d29f0b5f21
+
+  #=============================================== Resources ===================================================
+Resources:
+  BastionIamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: '/'
+
+  BastionIamPolicies:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: fullAccess
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: 's3:*'
+            Resource: '*'
+      Roles:
+        - !Ref BastionIamRole
+
+  BastionIamInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: '/'
+      Roles:
+        - !Ref BastionIamRole
+
+  BastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: SG to access to bastion host
+      VpcId:
+        Fn::ImportValue: !Sub '${EnvironmentName}-VPCID'
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: 0.0.0.0/0
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: '22'
+          ToPort: '22'
+          CidrIp: !Sub ${SourceIPAdd}
+      Tags: 
+        - Key: Name 
+          Value: !Sub "${EnvironmentName}-Bastion SG"
+
+  Bastion1:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - BastionSecurityGroup
+      - BastionIamInstanceProfile
+    Properties:
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          apt-get update -y
+          apt-get install unzip awscli -y
+          cd /home/ubuntu
+          aws s3 cp s3://${S3BucketKeyName}/${KeyBastionSSH}.pem /home/ubuntu
+          chmod 400 ${KeyBastionSSH}.pem
+      IamInstanceProfile: !Ref BastionIamInstanceProfile
+      SecurityGroupIds:
+        - Ref: BastionSecurityGroup
+      SubnetId:
+        Fn::ImportValue: !Sub '${EnvironmentName}-PUB1-SN'
+      ImageId: !FindInMap [WebAppRegion, !Ref 'AWS::Region', HVM64]
+      InstanceType: t3.small
+      KeyName: !Sub ${KeyBastionSSH}
+
+  EIP1:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain:
+        Fn::ImportValue: !Sub '${EnvironmentName}-VPCID'
+
+  EIPAssociation1:
+    Type: AWS::EC2::EIPAssociation
+    DependsOn:
+      - Bastion1
+      - EIP1
+    Properties:
+      InstanceId:
+        Ref: Bastion1
+      AllocationId:
+        Fn::GetAtt:
+          - EIP1
+          - AllocationId
+
+  #=============================================== Output ===================================================
+Outputs:
+  CIDRBastion1:
+    Description: The CIDR of Bastion Host 1
+    Value: !Join ['', [!GetAtt Bastion1.PrivateIp, !Sub '/32']]
+    Export:
+      Name: !Sub ${EnvironmentName}-BASTION1-CIDR
+
+  KeyBastionSSH:
+    Description: SSH Key Name
+    Value: !Sub ${KeyBastionSSH}
+    Export:
+      Name: !Sub ${EnvironmentName}-BASTION-KEYNAME
